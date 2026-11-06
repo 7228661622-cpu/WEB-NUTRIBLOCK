@@ -1,0 +1,832 @@
+import io
+import os
+from datetime import datetime
+import pandas as pd
+import streamlit as st
+
+# Configuración de página
+st.set_page_config(
+    page_title="NUTRIBLOCK - Ganadería de Precisión",
+    page_icon="🧊",
+    layout="centered",
+)
+
+# Estilos CSS personalizados
+st.markdown(
+    """
+    <style>
+    .stApp { background-color: #ffffff !important; padding-bottom: 90px !important; }
+    .phone-notch {
+        width: 130px; height: 18px; background-color: #0F2C59;
+        margin: -10px auto 15px auto; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+    }
+    h1, h2, h3, h4, .section-header { color: #0F2C59 !important; font-weight: 700 !important; }
+    .section-header {
+        font-size: 19px; margin-top: 15px; margin-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;
+    }
+    .sub-text { font-size: 13px; color: #475569; margin-bottom: 12px; }
+    .card-costo-total {
+        background-color: #0F2C59; color: #ffffff; border-radius: 10px;
+        padding: 12px 18px; display: flex; justify-content: space-between;
+        align-items: center; font-weight: bold; font-size: 18px;
+        margin-top: 10px; margin-bottom: 25px;
+    }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+
+# Inicialización de estado de sesión
+if "pagina_actual" not in st.session_state:
+    st.session_state.pagina_actual = "1. Inicio"
+
+if "historial_recetas" not in st.session_state:
+    st.session_state.historial_recetas = []
+
+if "resultado_calculado" not in st.session_state:
+    st.session_state.resultado_calculado = None
+
+if "catalogo_ingredientes" not in st.session_state:
+    st.session_state.catalogo_ingredientes = pd.DataFrame([
+        {
+            "id": 1,
+            "categoria": "Fuentes de calcio",
+            "nombre": "Carbonato de Calcio",
+            "aporte_ca": 38.0,
+            "aporte_p": 0.0,
+            "aporte_mg": 0.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 2.00,
+        },
+        {
+            "id": 2,
+            "categoria": "Fuentes de calcio",
+            "nombre": "Cal Agrícola",
+            "aporte_ca": 32.0,
+            "aporte_p": 0.0,
+            "aporte_mg": 0.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 1.50,
+        },
+        {
+            "id": 3,
+            "categoria": "Fuentes de fósforo",
+            "nombre": "Fosfato Dicálcico",
+            "aporte_ca": 23.0,
+            "aporte_p": 18.0,
+            "aporte_mg": 0.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 4.20,
+        },
+        {
+            "id": 4,
+            "categoria": "Fuentes de magnesio",
+            "nombre": "Óxido de Magnesio",
+            "aporte_ca": 0.0,
+            "aporte_p": 0.0,
+            "aporte_mg": 55.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 3.80,
+        },
+        {
+            "id": 5,
+            "categoria": "Fuentes de sodio",
+            "nombre": "Sal Común (NaCl)",
+            "aporte_ca": 0.0,
+            "aporte_p": 0.0,
+            "aporte_mg": 0.0,
+            "aporte_na": 39.3,
+            "precio_soles_kg": 1.20,
+        },
+        {
+            "id": 6,
+            "categoria": "Microminerales",
+            "nombre": "Premezcla Mineral Trace",
+            "aporte_ca": 5.0,
+            "aporte_p": 2.0,
+            "aporte_mg": 2.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 8.50,
+        },
+        {
+            "id": 7,
+            "categoria": "Endurecedores y aglutinantes",
+            "nombre": "Melaza de Caña",
+            "aporte_ca": 0.8,
+            "aporte_p": 0.1,
+            "aporte_mg": 0.3,
+            "aporte_na": 0.1,
+            "precio_soles_kg": 2.50,
+        },
+        {
+            "id": 8,
+            "categoria": "Endurecedores y aglutinantes",
+            "nombre": "Urea Agrícola",
+            "aporte_ca": 0.0,
+            "aporte_p": 0.0,
+            "aporte_mg": 0.0,
+            "aporte_na": 0.0,
+            "precio_soles_kg": 3.50,
+        },
+    ])
+
+if "aporte_pasto" not in st.session_state:
+    st.session_state.aporte_pasto = {
+        "Calcio (Ca)": 0.35,
+        "Fósforo (P)": 0.20,
+        "Magnesio (Mg)": 0.18,
+        "Sodio (Na)": 0.05,
+        "Potasio (K)": 1.50,
+        "Cobre (Cu)": 8.0,
+        "Zinc (Zn)": 25.0,
+    }
+
+st.markdown("<div class='phone-notch'></div>", unsafe_allow_html=True)
+
+logo_path = "Logo_NUTRIBLOCK.jpg"
+if os.path.exists(logo_path):
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(logo_path, use_container_width=True)
+else:
+    st.markdown(
+        """
+        <div style='text-align: center; font-size: 24px; font-weight: 800; color: #0F2C59;'>🧊 NUTRIBLOCK</div>
+        <div style='text-align: center; font-size: 11px; color: #2e7d32; font-weight: 600; margin-bottom: 15px;'>
+            TUS INSUMOS, TUS COSTOS, MEJORES DECISIONES
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+def generar_excel_receta(receta_dict):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_resumen = pd.DataFrame([
+            {
+                "Parámetro": "Fecha de Generación",
+                "Valor": str(receta_dict["fecha"]),
+            },
+            {
+                "Parámetro": "Categoría Animal",
+                "Valor": str(receta_dict["categoria"]),
+            },
+            {
+                "Parámetro": "Subcategoría / Etapa",
+                "Valor": str(receta_dict.get("subcategoria", "N/A")),
+            },
+            {
+                "Parámetro": "Peso Vivo (kg)",
+                "Valor": float(receta_dict["peso_vivo"]),
+            },
+            {
+                "Parámetro": "Producción (L/día)",
+                "Valor": float(receta_dict["leche"]),
+            },
+            {
+                "Parámetro": "Consumo Materia Seca Est. (kg/día)",
+                "Valor": float(receta_dict["cms"]),
+            },
+            {
+                "Parámetro": "Peso Total Fabricado (kg)",
+                "Valor": float(receta_dict["peso_lote"]),
+            },
+            {
+                "Parámetro": "Número de Animales",
+                "Valor": int(receta_dict["animales"]),
+            },
+            {
+                "Parámetro": "Consumo Objetivo Bloque (g/vaca/día)",
+                "Valor": float(receta_dict["consumo_g_vaca"]),
+            },
+            {
+                "Parámetro": "Costo Total del Lote (S/)",
+                "Valor": float(round(receta_dict["costo_total"], 2)),
+            },
+        ])
+
+        df_resumen.to_excel(
+            writer, sheet_name="Resumen_General", index=False
+        )
+        receta_dict["detalle"].to_excel(
+            writer, sheet_name="Detalle_Formulacion", index=False
+        )
+
+        for ws in writer.sheets.values():
+            for col in ws.columns:
+                max_len = max(len(str(cell.value or "")) for cell in col)
+                col_letter = col[0].column_letter
+                ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+    output.seek(0)
+    return output
+
+
+# =============================================================================
+# MÓDULO 1: INICIO
+# =============================================================================
+if st.session_state.pagina_actual == "1. Inicio":
+    tab_app, tab_cat, tab_info = st.tabs(
+        ["📲 Formular", "📦 Insumos", "🛡️ Nota Técnica"]
+    )
+
+    with tab_app:
+        st.markdown(
+            "<div class='section-header'>1. Datos del animal</div>",
+            unsafe_allow_html=True,
+        )
+
+        categoria_animal = st.selectbox(
+            "Categoría del animal",
+            options=[
+                "Vacas en producción",
+                "Vacas secas",
+                "Novillas / Vaquillonas",
+            ],
+            index=0,
+        )
+
+        subcategoria = "N/A"
+        leche_diaria = 0.0
+
+        if categoria_animal == "Vacas en producción":
+            col_peso, col_leche = st.columns(2)
+            with col_peso:
+                peso_vivo = st.number_input(
+                    "Peso vivo (kg)", min_value=100.0, value=500.0, step=10.0
+                )
+            with col_leche:
+                leche_diaria = st.number_input(
+                    "Leche (litros/día)", min_value=0.0, value=15.0, step=1.0
+                )
+
+        elif categoria_animal == "Vacas secas":
+            col_peso, col_sub = st.columns(2)
+            with col_peso:
+                peso_vivo = st.number_input(
+                    "Peso vivo (kg)", min_value=100.0, value=550.0, step=10.0
+                )
+            with col_sub:
+                subcategoria = st.selectbox(
+                    "Etapa de Secado",
+                    [
+                        "Secas lejanas (>30 días parto)",
+                        "Secas preparto (<30 días parto)",
+                    ],
+                )
+
+        else:
+            col_peso, col_sub = st.columns(2)
+            with col_peso:
+                peso_vivo = st.number_input(
+                    "Peso vivo (kg)", min_value=50.0, value=300.0, step=10.0
+                )
+            with col_sub:
+                subcategoria = st.selectbox(
+                    "Etapa de Desarrollo",
+                    [
+                        "Novilla 6 meses (200 kg)",
+                        "Novilla 12 meses (300 kg)",
+                        "Novilla 18 meses (450 kg)",
+                    ],
+                )
+
+        # Requerimientos NASEM (2021)
+        if categoria_animal == "Vacas en producción":
+            cms = (peso_vivo * 0.022) + (leche_diaria * 0.20)
+            req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                0.60,
+                0.37,
+                0.18,
+                0.22,
+            )
+        elif categoria_animal == "Vacas secas":
+            cms = peso_vivo * 0.019
+            if "preparto" in subcategoria:
+                req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                    0.39,
+                    0.21,
+                    0.14,
+                    0.20,
+                )
+            else:
+                req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                    0.31,
+                    0.19,
+                    0.13,
+                    0.16,
+                )
+        else:
+            cms = peso_vivo * 0.023
+            if "6 meses" in subcategoria:
+                req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                    0.78,
+                    0.32,
+                    0.14,
+                    0.17,
+                )
+            elif "12 meses" in subcategoria:
+                req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                    0.58,
+                    0.23,
+                    0.12,
+                    0.15,
+                )
+            else:
+                req_ca_pct, req_p_pct, req_mg_pct, req_na_pct = (
+                    0.44,
+                    0.21,
+                    0.12,
+                    0.15,
+                )
+
+        r_ca = (cms * req_ca_pct * 1000) / 100
+        r_p = (cms * req_p_pct * 1000) / 100
+        r_mg = (cms * req_mg_pct * 1000) / 100
+        r_na = (cms * req_na_pct * 1000) / 100
+
+        pasto = st.session_state.aporte_pasto
+        a_ca = (cms * pasto["Calcio (Ca)"] * 1000) / 100
+        a_p = (cms * pasto["Fósforo (P)"] * 1000) / 100
+        a_mg = (cms * pasto["Magnesio (Mg)"] * 1000) / 100
+        a_na = (cms * pasto["Sodio (Na)"] * 1000) / 100
+
+        d_ca = max(0.0, r_ca - a_ca)
+        d_p = max(0.0, r_p - a_p)
+        d_mg = max(0.0, r_mg - a_mg)
+        d_na = max(0.0, r_na - a_na)
+
+        st.markdown("---")
+        st.markdown(
+            "<div class='section-header'>2. Características del bloque y Hato</div>",
+            unsafe_allow_html=True,
+        )
+        col_b1, col_b2, col_b3 = st.columns(3)
+        with col_b1:
+            peso_fabricar = st.number_input(
+                "Peso total a fabricar (kg)", min_value=1.0, value=20.0, step=5.0
+            )
+        with col_b2:
+            num_animales = st.number_input(
+                "N° vacas en el hato", min_value=1, value=10, step=1
+            )
+        with col_b3:
+            consumo_target_g = st.number_input(
+                "Consumo obj. (g/vaca/día)", min_value=50, value=200, step=25
+            )
+
+        st.markdown("---")
+        st.markdown(
+            "<div class='section-header'>3. Seleccionar ingredientes disponibles</div>",
+            unsafe_allow_html=True,
+        )
+
+        df_ing = st.session_state.catalogo_ingredientes
+        categorias_ins = [
+            "Fuentes de calcio",
+            "Fuentes de fósforo",
+            "Fuentes de magnesio",
+            "Fuentes de sodio",
+            "Microminerales",
+            "Endurecedores y aglutinantes",
+        ]
+
+        ingredientes_seleccionados = []
+        for cat in categorias_ins:
+            opciones_cat = df_ing[df_ing["categoria"] == cat]["nombre"].tolist()
+            if opciones_cat:
+                sel = st.multiselect(
+                    f"{cat}", options=opciones_cat, default=opciones_cat[:1]
+                )
+                ingredientes_seleccionados.extend(sel)
+
+        st.markdown("---")
+
+        if st.button(
+            "🧮 Calcular lote", use_container_width=True, type="primary"
+        ):
+            if not ingredientes_seleccionados:
+                st.warning(
+                    "⚠️ Seleccione al menos un ingrediente por categoría para formular."
+                )
+            else:
+                df_filtrado = df_ing[
+                    df_ing["nombre"].isin(ingredientes_seleccionados)
+                ].copy()
+
+                req_g_per_kg_ca = d_ca / (consumo_target_g / 1000.0)
+                req_g_per_kg_p = d_p / (consumo_target_g / 1000.0)
+                req_g_per_kg_mg = d_mg / (consumo_target_g / 1000.0)
+                req_g_per_kg_na = d_na / (consumo_target_g / 1000.0)
+
+                pct_calculados = {}
+                for nombre_insumo in df_filtrado["nombre"]:
+                    if "Fosfato" in nombre_insumo:
+                        pct_inc = (req_g_per_kg_p / 180.0) * 100.0
+                        pct_calculados[nombre_insumo] = max(
+                            5.0, min(pct_inc, 25.0)
+                        )
+                    elif (
+                        "Carbonato" in nombre_insumo or "Cal" in nombre_insumo
+                    ):
+                        pct_inc = (req_g_per_kg_ca / 380.0) * 100.0
+                        pct_calculados[nombre_insumo] = max(
+                            5.0, min(pct_inc, 30.0)
+                        )
+                    elif "Sal" in nombre_insumo:
+                        pct_inc = (req_g_per_kg_na / 393.0) * 100.0
+                        pct_calculados[nombre_insumo] = max(
+                            10.0, min(pct_inc, 25.0)
+                        )
+                    elif (
+                        "Óxido" in nombre_insumo or "Magnesio" in nombre_insumo
+                    ):
+                        pct_inc = (req_g_per_kg_mg / 550.0) * 100.0
+                        pct_calculados[nombre_insumo] = max(
+                            2.0, min(pct_inc, 10.0)
+                        )
+                    elif "Urea" in nombre_insumo:
+                        pct_calculados[nombre_insumo] = (
+                            5.0
+                            if categoria_animal == "Vacas en producción"
+                            else 8.0
+                        )
+                    elif "Melaza" in nombre_insumo:
+                        pct_calculados[nombre_insumo] = 30.0
+                    else:
+                        pct_calculados[nombre_insumo] = 5.0
+
+                df_filtrado["pct_base"] = df_filtrado["nombre"].map(
+                    pct_calculados
+                )
+                suma_pct = df_filtrado["pct_base"].sum()
+                df_filtrado["pct_ajustado"] = (
+                    df_filtrado["pct_base"] / suma_pct
+                ) * 100.0
+
+                filas = []
+                costo_total = 0.0
+
+                for _, row in df_filtrado.iterrows():
+                    pct = row["pct_ajustado"]
+                    precio = row["precio_soles_kg"]
+                    kg_insumo = (peso_fabricar * pct) / 100.0
+                    costo_parcial = kg_insumo * precio
+                    costo_total += costo_parcial
+
+                    filas.append({
+                        "Insumo": row["nombre"],
+                        "% Inclusión": round(pct, 1),
+                        "Cantidad (kg)": round(kg_insumo, 2),
+                        "Costo (S/)": round(costo_parcial, 2),
+                    })
+
+                df_resultado = pd.DataFrame(filas)
+
+                nueva_receta = {
+                    "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "categoria": categoria_animal,
+                    "subcategoria": subcategoria,
+                    "peso_vivo": peso_vivo,
+                    "leche": leche_diaria,
+                    "cms": round(cms, 2),
+                    "peso_lote": peso_fabricar,
+                    "animales": num_animales,
+                    "consumo_g_vaca": consumo_target_g,
+                    "costo_total": costo_total,
+                    "detalle": df_resultado,
+                }
+
+                st.session_state.resultado_calculado = nueva_receta
+                st.session_state.historial_recetas.append(nueva_receta)
+                st.success(
+                    "✅ Formulación calculada ajustando el déficit NASEM (2021) vs. Pasto local."
+                )
+
+        if st.session_state.resultado_calculado is not None:
+            res = st.session_state.resultado_calculado
+            st.markdown("### 📊 Resultado de la Formulación")
+            st.dataframe(
+                res["detalle"], use_container_width=True, hide_index=True
+            )
+
+            dias_duracion = (
+                (res["peso_lote"] * 1000)
+                / (res["animales"] * res["consumo_g_vaca"])
+                if res["consumo_g_vaca"] > 0
+                else 0
+            )
+            st.caption(
+                f"💡 Duración estimada del bloque ({res['peso_lote']} kg): **{dias_duracion:.1f} días** para el hato de {res['animales']} vacas (CMS Est: {res['cms']} kg/día)."
+            )
+
+            st.markdown(
+                f"""
+                <div class='card-costo-total'>
+                    <span>Costo Total del Lote</span>
+                    <span>S/ {res['costo_total']:.2f}</span>
+                </div>
+            """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info(
+                "👈 Ingrese los datos de su hato y presione **'Calcular lote'**."
+            )
+
+    with tab_cat:
+        st.markdown(
+            "<div class='section-header'>📋 Tablas Definitivas de Requerimientos Minerales (NASEM 2021)</div>",
+            unsafe_allow_html=True,
+        )
+
+        tab_t1, tab_t2, tab_t3, tab_pasto = st.tabs([
+            "🥛 Vacas Producción",
+            "🐄 Vacas Secas",
+            "🐂 Novillas",
+            "🌿 Pasto Local",
+        ])
+
+        with tab_t1:
+            st.caption(
+                "Tabla 1: Requerimientos de referencia para Vacas en Lactación (NASEM 2021)"
+            )
+            df_t1 = pd.DataFrame([
+                {
+                    "Mineral": "Calcio (Ca)",
+                    "Requerimiento de Referencia": "0,58 – 0,64",
+                    "Unidad": "% MS",
+                },
+                {
+                    "Mineral": "Fósforo (P)",
+                    "Requerimiento de Referencia": "0,35 – 0,39",
+                    "Unidad": "% MS",
+                },
+                {
+                    "Mineral": "Magnesio (Mg)",
+                    "Requerimiento de Referencia": "0,17 – 0,18",
+                    "Unidad": "% MS",
+                },
+                {
+                    "Mineral": "Sodio (Na)",
+                    "Requerimiento de Referencia": "0,21 – 0,23",
+                    "Unidad": "% MS",
+                },
+                {
+                    "Mineral": "Potasio (K)",
+                    "Requerimiento de Referencia": "0,99 – 1,10",
+                    "Unidad": "% MS",
+                },
+                {
+                    "Mineral": "Cobre (Cu)",
+                    "Requerimiento de Referencia": "8 – 19",
+                    "Unidad": "mg/kg MS",
+                },
+                {
+                    "Mineral": "Zinc (Zn)",
+                    "Requerimiento de Referencia": "30 – 66",
+                    "Unidad": "mg/kg MS",
+                },
+            ])
+            st.dataframe(df_t1, use_container_width=True, hide_index=True)
+
+        with tab_t2:
+            st.caption("Tabla 2: Requerimientos para Vacas Secas (NASEM 2021)")
+            df_t2 = pd.DataFrame([
+                {
+                    "Mineral": "Calcio (Ca)",
+                    "Secas Lejanas": "0.31 % MS",
+                    "Secas Preparto": "0.39 % MS",
+                },
+                {
+                    "Mineral": "Fósforo (P)",
+                    "Secas Lejanas": "0.19 % MS",
+                    "Secas Preparto": "0.21 % MS",
+                },
+                {
+                    "Mineral": "Magnesio (Mg)",
+                    "Secas Lejanas": "0.13 % MS",
+                    "Secas Preparto": "0.14 % MS",
+                },
+                {
+                    "Mineral": "Sodio (Na)",
+                    "Secas Lejanas": "0.16 % MS",
+                    "Secas Preparto": "0.70 % MS*",
+                },
+            ])
+            st.dataframe(df_t2, use_container_width=True, hide_index=True)
+
+        with tab_t3:
+            st.caption(
+                "Tabla 3: Requerimientos para Novillas en Crecimiento (NASEM 2021)"
+            )
+            df_t3 = pd.DataFrame([
+                {
+                    "Mineral": "Calcio (Ca)",
+                    "6 Meses (200kg)": "0.78 % MS",
+                    "12 Meses (300kg)": "0.58 % MS",
+                    "18 Meses (450kg)": "0.44 % MS",
+                },
+                {
+                    "Mineral": "Fósforo (P)",
+                    "6 Meses (200kg)": "0.32 % MS",
+                    "12 Meses (300kg)": "0.23 % MS",
+                    "18 Meses (450kg)": "0.21 % MS",
+                },
+                {
+                    "Mineral": "Magnesio (Mg)",
+                    "6 Meses (200kg)": "0.14 % MS",
+                    "12 Meses (300kg)": "0.12 % MS",
+                    "18 Meses (450kg)": "0.12 % MS",
+                },
+                {
+                    "Mineral": "Sodio (Na)",
+                    "6 Meses (200kg)": "0.17 % MS",
+                    "12 Meses (300kg)": "0.15 % MS",
+                    "18 Meses (450kg)": "0.15 % MS",
+                },
+            ])
+            st.dataframe(df_t3, use_container_width=True, hide_index=True)
+
+        with tab_pasto:
+            st.caption(
+                "Aportes Minerales Provisionales del Pasto Altoandino / Tropical (Editable)"
+            )
+            df_pasto_edit = pd.DataFrame([
+                {
+                    "Mineral": k,
+                    "Aporte Estimado del Pasto": v,
+                    "Unidad": (
+                        "% MS" if "mg" not in str(v) else "mg/kg MS"
+                    ),
+                }
+                for k, v in st.session_state.aporte_pasto.items()
+            ])
+            st.dataframe(
+                df_pasto_edit, use_container_width=True, hide_index=True
+            )
+
+        st.markdown("---")
+        st.markdown(
+            "<div class='section-header'>📦 Administración de Insumos y Precios</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Edite los valores de aporte elemental y precios de su catálogo local:"
+        )
+
+        df_edit = st.data_editor(
+            st.session_state.catalogo_ingredientes,
+            hide_index=True,
+            column_config={
+                "precio_soles_kg": st.column_config.NumberColumn(
+                    "S/ / kg", format="S/ %.2f"
+                )
+            },
+            use_container_width=True,
+        )
+        st.session_state.catalogo_ingredientes = df_edit
+
+    with tab_info:
+        st.caption("Nota Técnica y Deslinde Zootécnico")
+        st.warning("""
+        **Nota Técnica para Prototipo:**
+        Esta aplicación es una herramienta informática de apoyo para la simulación de formulaciones y costos basada en NASEM (2021). 
+        Los cálculos descuentan los aportes estimados del pasto local. Toda formulación final debe ser revisada por un profesional en nutrición bovina.
+        """)
+
+# =============================================================================
+# MÓDULO 2: MIS RECETAS
+# =============================================================================
+elif st.session_state.pagina_actual == "2. Mis Recetas":
+    st.markdown(
+        "<div class='section-header'>📂 Mis Recetas Guardadas</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.historial_recetas:
+        st.write(
+            f"Se han generado **{len(st.session_state.historial_recetas)}** formulación(es) en esta sesión:"
+        )
+
+        recetas_temp = list(enumerate(st.session_state.historial_recetas))
+        for idx, receta in reversed(recetas_temp):
+            with st.expander(
+                f"Receta #{idx + 1} - {receta['categoria']} ({receta['peso_lote']} kg) - {receta['fecha']}"
+            ):
+                st.write(
+                    f"**Parámetros:** {receta['peso_vivo']} kg PV | CMS Est: {receta['cms']} kg/día | {receta['animales']} vacas"
+                )
+                st.write(f"**Costo Total:** S/ {receta['costo_total']:.2f}")
+                st.dataframe(
+                    receta["detalle"],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                col_dl, col_del = st.columns([3, 1])
+
+                with col_dl:
+                    try:
+                        excel_data = generar_excel_receta(receta)
+                        st.download_button(
+                            label="📥 Descargar Ficha Técnica (.xlsx)",
+                            data=excel_data,
+                            file_name=f"Receta_NUTRIBLOCK_{receta['categoria']}_{receta['peso_lote']}kg.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dl_excel_{receta['id']}",
+                        )
+                    except Exception:
+                        csv_data = (
+                            receta["detalle"]
+                            .to_csv(index=False)
+                            .encode("utf-8-sig")
+                        )
+                        st.download_button(
+                            label="📥 Descargar en CSV",
+                            data=csv_data,
+                            file_name=f"Receta_NUTRIBLOCK_{receta['categoria']}_{receta['peso_lote']}kg.csv",
+                            mime="text/csv",
+                            key=f"dl_csv_{receta['id']}",
+                        )
+
+                with col_del:
+                    if st.button(
+                        "🗑️ Eliminar",
+                        key=f"del_{receta['id']}",
+                        type="secondary",
+                    ):
+                        st.session_state.historial_recetas.pop(idx)
+                        if (
+                            st.session_state.resultado_calculado
+                            and st.session_state.resultado_calculado.get("id")
+                            == receta["id"]
+                        ):
+                            st.session_state.resultado_calculado = None
+                        st.rerun()
+    else:
+        st.info(
+            "💡 Aún no has guardado ninguna receta. Ve a '1. Inicio', configura tu lote y presiona **'Calcular lote'**."
+        )
+
+# =============================================================================
+# MÓDULO 3: GUÍA DETALLADA POR LOTE
+# =============================================================================
+elif st.session_state.pagina_actual == "3. Guía NUTRIBLOCK":
+    st.markdown(
+        "<div class='section-header'>📖 Guía Detallada de Preparación</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.resultado_calculado is not None:
+        receta_activa = st.session_state.resultado_calculado
+        st.success(
+            f"📋 **Instrucciones para el Lote:** {receta_activa['categoria']} ({receta_activa['peso_lote']} kg totales)"
+        )
+
+        st.markdown("### 1. Pesaje de Insumos para la Tanda")
+        df_pesos = receta_activa["detalle"].copy()
+        df_pesos["Peso (kg)"] = df_pesos["Cantidad (kg)"]
+        df_pesos["Peso (Gramos)"] = (df_pesos["Cantidad (kg)"] * 1000).round(0)
+
+        st.dataframe(
+            df_pesos[
+                ["Insumo", "% Inclusión", "Peso (kg)", "Peso (Gramos)"]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.markdown("""
+        ### 2. Protocolo de Mezclado en Campo
+        1. **Homogenizar secos:** Mezclar sales, cales y fosfatos por 5 minutos en seco.
+        2. **Fase líquida:** Entibiar la melaza y disolver lentamente la urea.
+        3. **Amasado:** Incorporar el líquido sobre los minerales hasta lograr consistencia pastosa.
+        4. **Compactación:** Apisonar en capas finas dentro del molde o balde.
+        5. **Secado:** Dejar fraguar a la sombra entre 4 y 6 días.
+        """)
+    else:
+        st.info(
+            "💡 Realice un cálculo en **'📲 Formular'** para generar la guía con los pesos exactos de su tanda."
+        )
+
+# Navegación inferior
+st.markdown("---")
+c1, c2, c3 = st.columns(3)
+with c1:
+    if st.button("📲 Inicio", use_container_width=True):
+        st.session_state.pagina_actual = "1. Inicio"
+        st.rerun()
+with c2:
+    if st.button("📂 Mis Recetas", use_container_width=True):
+        st.session_state.pagina_actual = "2. Mis Recetas"
+        st.rerun()
+with c3:
+    if st.button("📖 Guía", use_container_width=True):
+        st.session_state.pagina_actual = "3. Guía NUTRIBLOCK"
+        st.rerun()
